@@ -1,0 +1,161 @@
+{
+    "info": {
+      "name": "Big-Event 用户管理测试",
+      "_postman_id": "b0c2f6f2-2b2e-4f0a-9f0d-collection",
+      "description": "用户注册/登录/自我管理 + 管理员用户管理（需 role_id=1）",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "name": "用户-注册",
+        "request": {
+          "method": "POST",
+          "header": [],
+          "url": {
+            "raw": "{{baseUrl}}/user/register?username={{username}}&password={{password}}",
+            "host": ["{{baseUrl}}"],
+            "path": ["user", "register"],
+            "query": [
+              { "key": "username", "value": "{{username}}" },
+              { "key": "password", "value": "{{password}}" }
+            ]
+          }
+        }
+      },
+      {
+        "name": "用户-登录-保存Token",
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('登录成功', function () {",
+                "  pm.expect(pm.response.code).to.be.oneOf([200]);",
+                "  const json = pm.response.json();",
+                "  pm.expect(json.code).to.eql(0);",
+                "  pm.expect(json.data).to.be.a('string');",
+                "});",
+                "",
+                "// 保存 token 到环境变量",
+                "const resp = pm.response.json();",
+                "if (resp && resp.data) {",
+                "  pm.environment.set('token', resp.data);",
+                "} else {",
+                "  pm.environment.unset('token');",
+                "}"
+              ],
+              "type": "text/javascript"
+            }
+          }
+        ],
+        "request": {
+          "method": "POST",
+          "header": [],
+          "url": {
+            "raw": "{{baseUrl}}/user/login?username={{username}}&password={{password}}",
+            "host": ["{{baseUrl}}"],
+            "path": ["user", "login"],
+            "query": [
+              { "key": "username", "value": "{{username}}" },
+              { "key": "password", "value": "{{password}}" }
+            ]
+          }
+        }
+      },
+      {
+        "name": "用户-获取当前用户信息",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" }
+          ],
+          "url": { "raw": "{{baseUrl}}/user/userInfo", "host": ["{{baseUrl}}"], "path": ["user", "userInfo"] }
+        }
+      },
+      {
+        "name": "用户-更新我的信息（不能改role_id）",
+        "request": {
+          "method": "PUT",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" },
+            { "key": "Content-Type", "value": "application/json" }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"id\": 0,\n  \"nickname\": \"新昵称\",\n  \"email\": \"test@example.com\",\n  \"userPic\": \"http://example.com/avatar.png\"\n}"
+          },
+          "url": { "raw": "{{baseUrl}}/user/update", "host": ["{{baseUrl}}"], "path": ["user", "update"] }
+        },
+        "description": "id 请填你自己的用户ID。role_id 不允许在此接口修改。"
+      },
+      {
+        "name": "管理员-分页查询用户",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/admin/users?pageNum=1&pageSize=10&username=",
+            "host": ["{{baseUrl}}"],
+            "path": ["admin", "users"],
+            "query": [
+              { "key": "pageNum", "value": "1" },
+              { "key": "pageSize", "value": "10" },
+              { "key": "username", "value": "" }
+            ]
+          }
+        },
+        "description": "需要管理员（role_id=1）Token"
+      },
+      {
+        "name": "管理员-新增用户",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" },
+            { "key": "Content-Type", "value": "application/json" }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"username\": \"user_api_01\",\n  \"password\": \"123456\",\n  \"nickname\": \"接口用户\",\n  \"email\": \"api01@example.com\",\n  \"userPic\": \"http://example.com/u01.png\",\n  \"roleId\": 2,\n  \"dailyDownload\": 500,\n  \"sumDownload\": 0\n}"
+          },
+          "url": { "raw": "{{baseUrl}}/admin/users", "host": ["{{baseUrl}}"], "path": ["admin", "users"] }
+        },
+        "description": "需要管理员（role_id=1）Token；密码后端会做MD5"
+      },
+      {
+        "name": "管理员-更新用户（可改role）",
+        "request": {
+          "method": "PUT",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" },
+            { "key": "Content-Type", "value": "application/json" }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"id\": 0,\n  \"username\": \"user_api_01\",\n  \"nickname\": \"接口用户-改\",\n  \"email\": \"api01_mod@example.com\",\n  \"userPic\": \"http://example.com/u01_new.png\",\n  \"roleId\": 2,\n  \"dailyDownload\": 600,\n  \"sumDownload\": 10\n}"
+          },
+          "url": { "raw": "{{baseUrl}}/admin/users", "host": ["{{baseUrl}}"], "path": ["admin", "users"] }
+        },
+        "description": "需要管理员（role_id=1）Token；id 填待更新用户ID"
+      },
+      {
+        "name": "管理员-删除用户",
+        "request": {
+          "method": "DELETE",
+          "header": [
+            { "key": "Authorization", "value": "{{token}}", "type": "text" }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/admin/users/0",
+            "host": ["{{baseUrl}}"],
+            "path": ["admin", "users", "0"]
+          }
+        },
+        "description": "需要管理员（role_id=1）Token；path中的 0 改为目标用户ID"
+      }
+    ],
+    "event": [],
+    "variable": []
+  }
