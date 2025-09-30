@@ -14,7 +14,7 @@ public class OpenApiConfig {
     public OpenAPI customOpenAPI() {
         String schemeName = "Authorization";
         return new OpenAPI()
-                .info(new Info().title("Big-Event API").version("v1"))
+                .info(new Info().title("Cement API").version("v1"))
                 .components(new Components().addSecuritySchemes(
                         schemeName,
                         new SecurityScheme()
