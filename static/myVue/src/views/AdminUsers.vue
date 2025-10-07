@@ -33,6 +33,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { pageUsers, addUser, updateUser, deleteUser, getQuota, setQuota } from '@/api/admin'
+import { handleResponse, STATUS_CODES } from '@/utils/statusCode'
 
 const pageNum = ref(1)
 const pageSize = ref(10)
@@ -41,28 +42,163 @@ const items = ref([])
 
 const load = async (p=1) => {
   pageNum.value = p
-  const { data } = await pageUsers({ pageNum: pageNum.value, pageSize: pageSize.value, username: username.value })
-  if (data.code === 0) items.value = data.data.items || data.data
+  try {
+    const { data } = await pageUsers({ pageNum: pageNum.value, pageSize: pageSize.value, username: username.value })
+    const result = handleResponse(data, {
+      showError: true,
+      onSuccess: (responseData) => {
+        items.value = responseData.items || responseData
+      },
+      onError: (code, message) => {
+        if (code === STATUS_CODES.FORBIDDEN) {
+          alert('权限不足，只有管理员可以访问')
+        } else if (code === STATUS_CODES.UNAUTHORIZED) {
+          alert('请先登录')
+        } else {
+          alert(message)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+    alert('加载用户列表失败，请稍后重试')
+  }
 }
+
 onMounted(() => load(1))
 
 const onAdd = async () => {
-  const u = { username: prompt('用户名?') || '', password: prompt('密码?') || '123456', roleId: Number(prompt('roleId? 1=admin,2=user,3=guest', '2') || 2) }
-  const { data } = await addUser(u)
-  alert(data.code === 0 ? '已新增' : data.message); load(pageNum.value)
+  const u = { 
+    username: prompt('用户名?') || '', 
+    password: prompt('密码?') || '123456', 
+    roleId: Number(prompt('roleId? 1=admin,2=user,3=guest', '2') || 2) 
+  }
+  
+  if (!u.username) return
+  
+  try {
+    const { data } = await addUser(u)
+    const result = handleResponse(data, {
+      showSuccess: true,
+      showError: true,
+      onSuccess: () => {
+        load(pageNum.value)
+      },
+      onError: (code, message) => {
+        if (code === STATUS_CODES.FORBIDDEN) {
+          alert('权限不足，只有管理员可以添加用户')
+        } else if (code === STATUS_CODES.CONFLICT) {
+          alert('用户名已存在')
+        } else {
+          alert(message)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('添加用户失败:', error)
+    alert('添加用户失败，请稍后重试')
+  }
 }
+
 const onEdit = async (u) => {
-  const payload = { ...u, nickname: prompt('昵称?', u.nickname||'') || '', email: prompt('邮箱?', u.email||'') || '', roleId: Number(prompt('roleId?', String(u.roleId||2)) || u.roleId) }
-  const { data } = await updateUser(payload)
-  alert(data.code === 0 ? '已更新' : data.message); load(pageNum.value)
+  const payload = { 
+    ...u, 
+    nickname: prompt('昵称?', u.nickname||'') || '', 
+    email: prompt('邮箱?', u.email||'') || '', 
+    roleId: Number(prompt('roleId?', String(u.roleId||2)) || u.roleId) 
+  }
+  
+  try {
+    const { data } = await updateUser(payload)
+    const result = handleResponse(data, {
+      showSuccess: true,
+      showError: true,
+      onSuccess: () => {
+        load(pageNum.value)
+      },
+      onError: (code, message) => {
+        if (code === STATUS_CODES.FORBIDDEN) {
+          alert('权限不足，只有管理员可以编辑用户')
+        } else if (code === STATUS_CODES.NOT_FOUND) {
+          alert('用户不存在')
+        } else {
+          alert(message)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('更新用户失败:', error)
+    alert('更新用户失败，请稍后重试')
+  }
 }
-const onDel = async (id) => { if (!confirm('确认删除?')) return; const { data } = await deleteUser(id); alert(data.code===0?'已删除':data.message); load(pageNum.value) }
+
+const onDel = async (id) => { 
+  if (!confirm('确认删除?')) return
+  
+  try {
+    const { data } = await deleteUser(id)
+    const result = handleResponse(data, {
+      showSuccess: true,
+      showError: true,
+      onSuccess: () => {
+        load(pageNum.value)
+      },
+      onError: (code, message) => {
+        if (code === STATUS_CODES.FORBIDDEN) {
+          alert('权限不足，只有管理员可以删除用户')
+        } else if (code === STATUS_CODES.NOT_FOUND) {
+          alert('用户不存在')
+        } else {
+          alert(message)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('删除用户失败:', error)
+    alert('删除用户失败，请稍后重试')
+  }
+}
+
 const onQuota = async (id) => {
-  const q = await getQuota(id); const cur = q.data?.data || {}
-  const value = Number(prompt('配额值?', cur.value ?? 500))
-  const ttlHours = Number(prompt('过期时间(小时)?', Math.ceil((cur.ttlSeconds||86400)/3600)))
-  const { data } = await setQuota(id, value, ttlHours)
-  alert(data.code===0?'已设置':data.message)
+  try {
+    const q = await getQuota(id)
+    const result = handleResponse(q.data, {
+      showError: true,
+      onSuccess: (responseData) => {
+        const cur = responseData || {}
+        const value = Number(prompt('配额值?', cur.value ?? 500))
+        const ttlHours = Number(prompt('过期时间(小时)?', Math.ceil((cur.ttlSeconds||86400)/3600)))
+        
+        if (isNaN(value) || isNaN(ttlHours)) return
+        
+        setQuota(id, value, ttlHours).then(async (response) => {
+          const result = handleResponse(response.data, {
+            showSuccess: true,
+            showError: true,
+            onError: (code, message) => {
+              if (code === STATUS_CODES.FORBIDDEN) {
+                alert('权限不足，只有管理员可以设置配额')
+              } else if (code === STATUS_CODES.BAD_REQUEST) {
+                alert('参数不合法')
+              } else {
+                alert(message)
+              }
+            }
+          })
+        })
+      },
+      onError: (code, message) => {
+        if (code === STATUS_CODES.FORBIDDEN) {
+          alert('权限不足，只有管理员可以查看配额')
+        } else {
+          alert(message)
+        }
+      }
+    })
+  } catch (error) {
+    console.error('获取配额失败:', error)
+    alert('获取配额失败，请稍后重试')
+  }
 }
 </script>
 <style scoped>

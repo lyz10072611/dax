@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataStore>
+  <id>cement_datastore</id>
+  <name>cement_datastore</name>
+  <description>PostgreSQL datastore for cement plant data</description>
+  <type>PostGIS</type>
+  <enabled>true</enabled>
+  <connectionParameters>
+    <entry key="host">localhost</entry>
+    <entry key="port">5432</entry>
+    <entry key="database">cement</entry>
+    <entry key="schema">public</entry>
+    <entry key="user">postgres</entry>
+    <entry key="passwd">postgres</entry>
+    <entry key="dbtype">postgis</entry>
+    <entry key="Expose primary keys">true</entry>
+    <entry key="validate connections">true</entry>
+    <entry key="Support on the fly geometry simplifications">true</entry>
+    <entry key="create database">false</entry>
+    <entry key="preparedStatements">true</entry>
+  </connectionParameters>
+</dataStore>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lyz.mapper.CementPlantMapper">
+    
+    <!-- 综合搜索 -->
+    <select id="comprehensiveSearch" resultType="com.lyz.pojo.CementPlantIdentification">
+        SELECT cpi.*, cp.plant_name 
+        FROM cement_plant_identifications cpi 
+        LEFT JOIN cement_plants cp ON cpi.plant_id = cp.plant_id 
+        WHERE 1=1 
+        <if test="plantName != null and plantName != ''">
+            AND cp.plant_name LIKE CONCAT('%', #{plantName}, '%')
+        </if>
+        <if test="province != null and province != ''">
+            AND cpi.province = #{province}
+        </if>
+        <if test="city != null and city != ''">
+            AND cpi.city = #{city}
+        </if>
+        <if test="district != null and district != ''">
+            AND cpi.district = #{district}
+        </if>
+        <if test="status != null and status != ''">
+            AND cp.status = #{status}
+        </if>
+        <if test="startTime != null and startTime != ''">
+            AND cpi.identification_time >= #{startTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            AND cpi.identification_time <= #{endTime}
+        </if>
+        <if test="minNdvi != null">
+            AND cpi.ndvi_index >= #{minNdvi}
+        </if>
+        <if test="maxNdvi != null">
+            AND cpi.ndvi_index <= #{maxNdvi}
+        </if>
+        <if test="longitude != null and latitude != null and radiusKm != null">
+            AND (6371 * acos(cos(radians(#{latitude})) * cos(radians(cpi.latitude)) * 
+                cos(radians(cpi.longitude) - radians(#{longitude})) + sin(radians(#{latitude})) * 
+                sin(radians(cpi.latitude)))) <= #{radiusKm}
+        </if>
+        ORDER BY cpi.identification_time DESC
+    </select>
+    
+    <!-- 按时间统计 -->
+    <select id="getStatisticsByTime" resultType="java.util.Map">
+        SELECT 
+        <choose>
+            <when test="timeUnit == 'day'">
+                DATE(identification_time) as time_period,
+            </when>
+            <when test="timeUnit == 'month'">
+                DATE_FORMAT(identification_time, '%Y-%m') as time_period,
+            </when>
+            <when test="timeUnit == 'year'">
+                YEAR(identification_time) as time_period,
+            </when>
+        </choose>
+        COUNT(*) as count 
+        FROM cement_plant_identifications 
+        GROUP BY time_period 
+        ORDER BY time_period DESC
+    </select>
+    
+</mapper>

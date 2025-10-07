@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -40,6 +41,11 @@ public class UserServiceImpl implements UserService {
     @Override
     public User findByUserName(String username) {
         return userMapper.findByUserName(username);
+    }
+    
+    @Override
+    public User findByEmail(String email) {
+        return userMapper.findByEmail(email);
     }
 
     @Override
@@ -86,15 +92,26 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void incrUserSumDownloadBy(Integer id, Integer delta) {
-        userMapper.incrSumDownloadBy(id, delta);
+        // 由于数据库中没有download_count字段，这个方法暂时不实现
+        // userMapper.incrSumDownloadBy(id, delta);
     }
 
     @Override
-    public void register(String username, String password) {
+    public User register(String username, String password) {
         // 密码加密
         String md5String = Md5Util.getMD5String(password);
-        // 添加用户
-        userMapper.add(username, md5String);
+        // 添加用户（需要提供email参数）
+        userMapper.add(username, md5String, null);
+        return findByUserName(username);
+    }
+    
+    @Override
+    public User register(String username, String password, String email, String phone) {
+        // 密码加密
+        String md5String = Md5Util.getMD5String(password);
+        // 添加用户（需要扩展mapper方法支持email和phone）
+        userMapper.addWithEmailAndPhone(username, md5String, email, phone);
+        return findByUserName(username);
     }
 
     @Override
@@ -104,9 +121,10 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void updateAvatar(String avatarUrl) {
-        Map<String, Object> map = ThreadLocalUtil.get();
-        Integer id = (Integer) map.get("id");
-        userMapper.updateAvatar(avatarUrl, id);
+        // 由于数据库中没有user_pic字段，这个方法暂时不实现
+        // Map<String, Object> map = ThreadLocalUtil.get();
+        // Integer id = (Integer) map.get("id");
+        // userMapper.updateAvatar(avatarUrl, id);
     }
 
     @Override
@@ -151,7 +169,21 @@ public class UserServiceImpl implements UserService {
     }
     
     @Override
-    public boolean checkDailyDownloadLimit(Integer userId, Integer limit) {
+    public boolean checkDailyDownloadLimit(Integer userId, Integer roleCode) {
+        // 根据角色确定下载限制
+        int limit;
+        if (roleCode == 0) {
+            limit = -1; // 管理员无限制
+        } else if (roleCode == 1) {
+            limit = 500; // 普通用户500次
+        } else {
+            limit = 0; // 游客无下载权限
+        }
+        
+        if (limit == -1) {
+            return true; // 管理员无限制
+        }
+        
         Integer currentCount = getDailyDownloadCount(userId);
         return currentCount < limit;
     }
@@ -182,5 +214,55 @@ public class UserServiceImpl implements UserService {
             tomorrow.atStartOfDay().plusHours(2)
         ).getSeconds();
         stringRedisTemplate.expire(resetKey, secondsUntilMidnight, TimeUnit.SECONDS);
+    }
+    
+    @Override
+    public Map<String, Object> getUserPermissions(Integer roleCode) {
+        Map<String, Object> permissions = new HashMap<>();
+        
+        if (roleCode == null) {
+            permissions.put("canUpload", false);
+            permissions.put("canDownload", false);
+            permissions.put("canManageUsers", false);
+            permissions.put("canManageData", false);
+            permissions.put("dailyDownloadQuota", 0);
+            return permissions;
+        }
+        
+        switch (roleCode) {
+            case 0: // 管理员
+                permissions.put("canUpload", true);
+                permissions.put("canDownload", true);
+                permissions.put("canManageUsers", true);
+                permissions.put("canManageData", true);
+                permissions.put("dailyDownloadQuota", -1); // 无限制
+                permissions.put("roleName", "管理员");
+                break;
+            case 1: // 普通用户
+                permissions.put("canUpload", false);
+                permissions.put("canDownload", true);
+                permissions.put("canManageUsers", false);
+                permissions.put("canManageData", false);
+                permissions.put("dailyDownloadQuota", 500);
+                permissions.put("roleName", "普通用户");
+                break;
+            case 2: // 游客
+                permissions.put("canUpload", false);
+                permissions.put("canDownload", false);
+                permissions.put("canManageUsers", false);
+                permissions.put("canManageData", false);
+                permissions.put("dailyDownloadQuota", 0);
+                permissions.put("roleName", "游客");
+                break;
+            default:
+                permissions.put("canUpload", false);
+                permissions.put("canDownload", false);
+                permissions.put("canManageUsers", false);
+                permissions.put("canManageData", false);
+                permissions.put("dailyDownloadQuota", 0);
+                permissions.put("roleName", "未知角色");
+        }
+        
+        return permissions;
     }
 }

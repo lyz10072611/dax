@@ -12,6 +12,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * TIF文件处理服务实现
@@ -22,6 +25,9 @@ public class TifProcessingService {
     
     @Autowired
     private GeospatialMapper geospatialMapper;
+    
+    // 异步处理线程池
+    private final ExecutorService executorService = Executors.newFixedThreadPool(4);
     
     /**
      * 处理TIF文件并生成瓦片数据
@@ -40,11 +46,19 @@ public class TifProcessingService {
             // 2. 更新文件信息
             updateFileMetadata(fileId, tifFile);
             
-            // 3. 生成瓦片数据
-            generateTiles(fileId, tifFile);
+            // 3. 异步生成瓦片数据
+            CompletableFuture.runAsync(() -> {
+                try {
+                    generateTiles(fileId, tifFile);
+                    updateProcessingStatus(fileId, "processed");
+                } catch (Exception e) {
+                    updateProcessingStatus(fileId, "error");
+                    System.err.println("异步处理TIF文件失败: " + e.getMessage());
+                }
+            }, executorService);
             
-            // 4. 更新处理状态
-            updateProcessingStatus(fileId, "processed");
+            // 4. 立即更新状态为处理中
+            updateProcessingStatus(fileId, "processing");
             
         } catch (Exception e) {
             // 更新处理状态为错误
@@ -62,18 +76,48 @@ public class TifProcessingService {
             // 设置文件大小
             file.setFileSize(tifFile.length());
             
-            // 这里应该使用GDAL或其他库来读取TIF文件的真实元数据
-            // 目前使用示例数据
-            file.setBoundsWest(new BigDecimal("114.3000"));
-            file.setBoundsEast(new BigDecimal("114.4000"));
-            file.setBoundsSouth(new BigDecimal("38.1000"));
-            file.setBoundsNorth(new BigDecimal("38.2000"));
-            file.setResolutionX(new BigDecimal("0.0001"));
-            file.setResolutionY(new BigDecimal("0.0001"));
-            file.setBandsCount(1);
-            file.setDataType("FLOAT32");
-            file.setStatus("active");
+            // 尝试读取TIF文件的基本信息
+            try {
+                BufferedImage image = ImageIO.read(tifFile);
+                if (image != null) {
+                    // 如果能读取为图像，设置基本信息
+                    file.setBandsCount(image.getColorModel().getNumComponents());
+                    file.setDataType("UINT8");
+                    
+                    // 根据文件名或内容推断地理范围（这里使用示例数据）
+                    // 实际应用中应该使用GDAL等专业库读取地理信息
+                    file.setBoundsWest(new BigDecimal("114.3000"));
+                    file.setBoundsEast(new BigDecimal("114.4000"));
+                    file.setBoundsSouth(new BigDecimal("38.1000"));
+                    file.setBoundsNorth(new BigDecimal("38.2000"));
+                    file.setResolutionX(new BigDecimal("0.0001"));
+                    file.setResolutionY(new BigDecimal("0.0001"));
+                } else {
+                    // 如果无法读取为图像，可能是地理TIF文件
+                    file.setBandsCount(1);
+                    file.setDataType("FLOAT32");
+                    
+                    // 设置默认地理范围
+                    file.setBoundsWest(new BigDecimal("114.3000"));
+                    file.setBoundsEast(new BigDecimal("114.4000"));
+                    file.setBoundsSouth(new BigDecimal("38.1000"));
+                    file.setBoundsNorth(new BigDecimal("38.2000"));
+                    file.setResolutionX(new BigDecimal("0.0001"));
+                    file.setResolutionY(new BigDecimal("0.0001"));
+                }
+            } catch (Exception e) {
+                // 如果读取失败，设置默认值
+                file.setBandsCount(1);
+                file.setDataType("UNKNOWN");
+                file.setBoundsWest(new BigDecimal("114.3000"));
+                file.setBoundsEast(new BigDecimal("114.4000"));
+                file.setBoundsSouth(new BigDecimal("38.1000"));
+                file.setBoundsNorth(new BigDecimal("38.2000"));
+                file.setResolutionX(new BigDecimal("0.0001"));
+                file.setResolutionY(new BigDecimal("0.0001"));
+            }
             
+            file.setStatus("processing");
             geospatialMapper.updateFile(file);
         }
     }

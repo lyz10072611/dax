@@ -23,12 +23,12 @@ public class CementPlantGeodata {
     
     private String dataType; // 数据类型
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime acquisitionDate; // 数据获取日期
     
     private String processingStatus = "pending"; // 处理状态
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime createdAt;
     
     // 关联查询字段（用于查询结果）

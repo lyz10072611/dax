@@ -74,7 +74,7 @@ public class FileUploadController {
     public Result<FileInfo> get(@PathVariable String name) throws IOException {
         Path p = Paths.get(uploadDir, name);
         if (!Files.exists(p) || !Files.isRegularFile(p)) {
-            return Result.error("文件不存在");
+            return Result.notFound("文件不存在");
         }
         File f = p.toFile();
         FileInfo info = new FileInfo();
@@ -88,7 +88,7 @@ public class FileUploadController {
     @PostMapping
     @Operation(summary = "上传文件", description = "仅管理员")
     public Result<String> upload(@RequestPart("file") MultipartFile file) throws IOException {
-        if (!isAdminByDb()) return Result.error("无权限");
+        if (!isAdminByDb()) return Result.forbidden("无权限");
         Path dir = Paths.get(uploadDir);
         if (!Files.exists(dir)) {
             Files.createDirectories(dir);
@@ -102,9 +102,9 @@ public class FileUploadController {
     @PutMapping("/{name}")
     @Operation(summary = "替换文件", description = "仅管理员")
     public Result replace(@PathVariable String name, @RequestPart("file") MultipartFile file) throws IOException {
-        if (!isAdminByDb()) return Result.error("无权限");
+        if (!isAdminByDb()) return Result.forbidden("无权限");
         Path target = Paths.get(uploadDir, name);
-        if (!Files.exists(target)) return Result.error("文件不存在");
+        if (!Files.exists(target)) return Result.notFound("文件不存在");
         file.transferTo(target.toFile());
         return Result.success();
     }
@@ -112,9 +112,9 @@ public class FileUploadController {
     @DeleteMapping("/{name}")
     @Operation(summary = "删除文件", description = "仅管理员")
     public Result delete(@PathVariable String name) throws IOException {
-        if (!isAdminByDb()) return Result.error("无权限");
+        if (!isAdminByDb()) return Result.forbidden("无权限");
         Path target = Paths.get(uploadDir, name);
-        if (!Files.exists(target)) return Result.error("文件不存在");
+        if (!Files.exists(target)) return Result.notFound("文件不存在");
         Files.delete(target);
         return Result.success();
     }

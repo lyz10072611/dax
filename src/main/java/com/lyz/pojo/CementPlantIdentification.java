@@ -30,7 +30,7 @@ public class CementPlantIdentification {
     private BigDecimal latitude;
     
     @NotNull(message = "识别时间不能为空")
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime identificationTime;
     
     private String dataSource; // 数据来源，如 GF-2, Landsat-8, Sentinel-2
@@ -40,7 +40,7 @@ public class CementPlantIdentification {
     private String city;
     private String district;
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime createdAt;
     
     // 关联的水泥厂信息（用于查询结果）

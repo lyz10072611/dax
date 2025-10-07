@@ -23,7 +23,7 @@ let timer = null
 const poll = async () => {
   if (!taskId.value) return
   const { data } = await taskStatus(taskId.value)
-  if (data.code === 0) {
+  if (data.code === 200) {
     status.value = data.data.status
     if (status.value === 'done' || status.value === 'error') clearInterval(timer)
   }
@@ -33,7 +33,7 @@ const onEnqueue = async () => {
   const ids = idText.value.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n))
   if (!ids.length) return alert('请输入有效ID')
   const { data } = await enqueue(ids)
-  if (data.code === 0) {
+  if (data.code === 200) {
     taskId.value = data.data
     status.value = 'queued'
     timer = setInterval(poll, 1500)

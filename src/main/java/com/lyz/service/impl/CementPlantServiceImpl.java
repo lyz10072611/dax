@@ -9,14 +9,19 @@ import com.lyz.pojo.GeospatialFile;
 import com.lyz.pojo.CementPlantGeodata;
 import com.lyz.pojo.PageBean;
 import com.lyz.service.CementPlantService;
+import com.lyz.service.DataLockService;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * 水泥厂业务服务实现类
@@ -29,6 +34,12 @@ public class CementPlantServiceImpl implements CementPlantService {
     
     @Autowired
     private GeospatialMapper geospatialMapper;
+    
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+    
+    @Autowired
+    private DataLockService dataLockService;
     
     @Override
     public CementPlant findById(Long plantId) {
@@ -132,48 +143,71 @@ public class CementPlantServiceImpl implements CementPlantService {
     @Override
     @Transactional
     public void addCementPlantData(CementPlantDataDTO dataDTO) {
-        // 1. 根据名称判断水泥厂是否存在
-        CementPlant existingPlant = cementPlantMapper.findByName(dataDTO.getPlantName());
+        // 使用分布式锁防止并发问题
+        String lockValue = dataLockService.acquireCementPlantLock(dataDTO.getPlantName(), 30);
         
-        Long plantId;
-        if (existingPlant == null) {
-            // 2. 如果不存在，先插入到cement_plants表
-            CementPlant newPlant = new CementPlant();
-            newPlant.setPlantName(dataDTO.getPlantName());
-            newPlant.setLongitude(dataDTO.getLongitude());
-            newPlant.setLatitude(dataDTO.getLatitude());
-            newPlant.setProvince(dataDTO.getProvince());
-            newPlant.setCity(dataDTO.getCity());
-            newPlant.setDistrict(dataDTO.getDistrict());
-            newPlant.setStatus(dataDTO.getStatus() != null ? dataDTO.getStatus() : "active");
-            
-            cementPlantMapper.insert(newPlant);
-            plantId = newPlant.getPlantId();
-        } else {
-            // 3. 如果存在，直接使用现有的plantId
-            plantId = existingPlant.getPlantId();
+        if (lockValue == null) {
+            throw new RuntimeException("系统繁忙，请稍后重试");
         }
         
-        // 4. 插入识别记录到cement_plant_identifications表
-        CementPlantIdentification identification = new CementPlantIdentification();
-        identification.setPlantId(plantId);
-        identification.setLongitude(dataDTO.getLongitude());
-        identification.setLatitude(dataDTO.getLatitude());
-        identification.setIdentificationTime(dataDTO.getIdentificationTime() != null ? 
-            dataDTO.getIdentificationTime() : LocalDateTime.now());
-        identification.setDataSource(dataDTO.getDataSource() != null ? 
-            dataDTO.getDataSource() : "GF-2");
-        identification.setImageUuid(dataDTO.getImageUuid());
-        identification.setNdviIndex(dataDTO.getNdviIndex());
-        identification.setProvince(dataDTO.getProvince());
-        identification.setCity(dataDTO.getCity());
-        identification.setDistrict(dataDTO.getDistrict());
-        
-        cementPlantMapper.insertIdentification(identification);
-        
-        // 5. 如果有TIF文件路径，处理地理数据
-        if (dataDTO.getTifFilePath() != null && !dataDTO.getTifFilePath().isEmpty()) {
-            processTifFileForPlant(plantId, identification.getIdentificationId(), dataDTO.getTifFilePath());
+        try {
+            
+            // 1. 根据名称判断水泥厂是否存在（先查Redis缓存）
+            CementPlant existingPlant = getCementPlantFromCacheOrDB(dataDTO.getPlantName());
+            
+            Long plantId;
+            if (existingPlant == null) {
+                // 2. 如果不存在，先插入到cement_plants表
+                CementPlant newPlant = new CementPlant();
+                newPlant.setPlantName(dataDTO.getPlantName());
+                newPlant.setLongitude(dataDTO.getLongitude());
+                newPlant.setLatitude(dataDTO.getLatitude());
+                newPlant.setProvince(dataDTO.getProvince());
+                newPlant.setCity(dataDTO.getCity());
+                newPlant.setDistrict(dataDTO.getDistrict());
+                newPlant.setStatus(dataDTO.getStatus() != null ? dataDTO.getStatus() : "active");
+                newPlant.setCreateTime(LocalDateTime.now());
+                
+                cementPlantMapper.insert(newPlant);
+                plantId = newPlant.getPlantId();
+                
+                // 缓存新创建的水泥厂信息
+                cacheCementPlant(newPlant);
+                
+            } else {
+                // 3. 如果存在，直接使用现有的plantId
+                plantId = existingPlant.getPlantId();
+            }
+            
+            // 4. 插入识别记录到cement_plant_identifications表
+            CementPlantIdentification identification = new CementPlantIdentification();
+            identification.setPlantId(plantId);
+            identification.setLongitude(dataDTO.getLongitude());
+            identification.setLatitude(dataDTO.getLatitude());
+            identification.setIdentificationTime(dataDTO.getIdentificationTime() != null ? 
+                dataDTO.getIdentificationTime() : LocalDateTime.now());
+            identification.setDataSource(dataDTO.getDataSource() != null ? 
+                dataDTO.getDataSource() : "GF-2");
+            identification.setImageUuid(dataDTO.getImageUuid());
+            identification.setNdviIndex(dataDTO.getNdviIndex());
+            identification.setProvince(dataDTO.getProvince());
+            identification.setCity(dataDTO.getCity());
+            identification.setDistrict(dataDTO.getDistrict());
+            identification.setCreatedAt(LocalDateTime.now());
+            
+            cementPlantMapper.insertIdentification(identification);
+            
+            // 5. 如果有TIF文件路径，处理地理数据
+            if (dataDTO.getTifFilePath() != null && !dataDTO.getTifFilePath().isEmpty()) {
+                processTifFileForPlant(plantId, identification.getIdentificationId(), dataDTO.getTifFilePath());
+            }
+            
+            // 6. 更新Redis中的统计数据
+            updateStatisticsCache();
+            
+        } finally {
+            // 释放锁
+            dataLockService.releaseCementPlantLock(dataDTO.getPlantName(), lockValue);
         }
     }
     
@@ -230,6 +264,157 @@ public class CementPlantServiceImpl implements CementPlantService {
         int lastBackslash = filePath.lastIndexOf('\\');
         int lastSeparator = Math.max(lastSlash, lastBackslash);
         return lastSeparator >= 0 ? filePath.substring(lastSeparator + 1) : filePath;
+    }
+    
+    /**
+     * 从缓存或数据库中获取水泥厂信息
+     */
+    private CementPlant getCementPlantFromCacheOrDB(String plantName) {
+        String cacheKey = "cement_plant:" + plantName;
+        
+        // 先查Redis缓存
+        String cachedData = stringRedisTemplate.opsForValue().get(cacheKey);
+        if (cachedData != null) {
+            try {
+                // 这里可以使用JSON序列化，简化起见直接查数据库
+                return cementPlantMapper.findByName(plantName);
+            } catch (Exception e) {
+                // 缓存数据异常，清除缓存
+                stringRedisTemplate.delete(cacheKey);
+            }
+        }
+        
+        // 缓存不存在或异常，查数据库
+        CementPlant plant = cementPlantMapper.findByName(plantName);
+        if (plant != null) {
+            cacheCementPlant(plant);
+        }
+        
+        return plant;
+    }
+    
+    /**
+     * 缓存水泥厂信息
+     */
+    private void cacheCementPlant(CementPlant plant) {
+        String cacheKey = "cement_plant:" + plant.getPlantName();
+        // 设置缓存过期时间为1小时
+        stringRedisTemplate.opsForValue().set(cacheKey, "cached", 1, TimeUnit.HOURS);
+    }
+    
+    /**
+     * 更新统计数据缓存
+     */
+    private void updateStatisticsCache() {
+        // 更新活跃水泥厂数量缓存
+        Integer activeCount = cementPlantMapper.countActivePlants();
+        stringRedisTemplate.opsForValue().set("stats:active_plants_count", 
+            String.valueOf(activeCount), 30, TimeUnit.MINUTES);
+        
+        // 更新总识别记录数量缓存
+        Integer totalIdentifications = cementPlantMapper.countIdentificationsByTimeRange(null, null);
+        stringRedisTemplate.opsForValue().set("stats:total_identifications_count", 
+            String.valueOf(totalIdentifications), 30, TimeUnit.MINUTES);
+    }
+    
+    // ==================== 新增的高级查询方法实现 ====================
+    
+    @Override
+    public List<CementPlant> searchPlantsByName(String plantName, Integer limit) {
+        return cementPlantMapper.searchPlantsByName(plantName, limit);
+    }
+    
+    @Override
+    public List<CementPlant> findPlantsByRegion(String province, String city, String district) {
+        return cementPlantMapper.findPlantsByRegion(province, city, district);
+    }
+    
+    @Override
+    public List<CementPlant> findPlantsByLocation(Double longitude, Double latitude, Double radiusKm) {
+        // 将公里转换为经纬度范围（简化计算）
+        double latRange = radiusKm / 111.0; // 1度纬度约等于111公里
+        double lngRange = radiusKm / (111.0 * Math.cos(Math.toRadians(latitude)));
+        
+        return cementPlantMapper.findByLocationRange(
+            longitude - lngRange, longitude + lngRange,
+            latitude - latRange, latitude + latRange);
+    }
+    
+    @Override
+    public List<CementPlant> findPlantsByStatus(String status) {
+        return cementPlantMapper.findPlantsByStatus(status);
+    }
+    
+    @Override
+    public List<CementPlantIdentification> findIdentificationsByPlantId(Long plantId) {
+        return cementPlantMapper.findIdentificationsByPlantId(plantId);
+    }
+    
+    @Override
+    public CementPlantIdentification findLatestIdentificationByPlantId(Long plantId) {
+        return cementPlantMapper.findLatestIdentificationByPlantId(plantId);
+    }
+    
+    @Override
+    public List<CementPlantIdentification> findIdentificationsByTimeRange(String startTime, String endTime, Long plantId) {
+        return cementPlantMapper.findIdentificationsByTimeRangeWithPlantId(startTime, endTime, plantId);
+    }
+    
+    @Override
+    public List<CementPlantIdentification> findIdentificationsByNdviRange(Float minNdvi, Float maxNdvi) {
+        return cementPlantMapper.findIdentificationsByNdviRange(minNdvi, maxNdvi);
+    }
+    
+    @Override
+    public PageBean<CementPlantIdentification> comprehensiveSearch(Integer pageNum, Integer pageSize, 
+        String plantName, String province, String city, String district, String status,
+        String startTime, String endTime, Float minNdvi, Float maxNdvi, 
+        Double longitude, Double latitude, Double radiusKm) {
+        
+        PageHelper.startPage(pageNum, pageSize);
+        List<CementPlantIdentification> list = cementPlantMapper.comprehensiveSearch(
+            plantName, province, city, district, status, startTime, endTime, 
+            minNdvi, maxNdvi, longitude, latitude, radiusKm);
+        PageInfo<CementPlantIdentification> pageInfo = new PageInfo<>(list);
+        return new PageBean<>(pageInfo.getTotal(), pageInfo.getList());
+    }
+    
+    @Override
+    public Map<String, Object> getStatisticsOverview() {
+        Map<String, Object> statistics = new HashMap<>();
+        
+        // 从缓存获取统计数据
+        String activeCountStr = stringRedisTemplate.opsForValue().get("stats:active_plants_count");
+        String totalIdentificationsStr = stringRedisTemplate.opsForValue().get("stats:total_identifications_count");
+        
+        if (activeCountStr != null) {
+            statistics.put("activePlantsCount", Integer.parseInt(activeCountStr));
+        } else {
+            statistics.put("activePlantsCount", cementPlantMapper.countActivePlants());
+        }
+        
+        if (totalIdentificationsStr != null) {
+            statistics.put("totalIdentificationsCount", Integer.parseInt(totalIdentificationsStr));
+        } else {
+            statistics.put("totalIdentificationsCount", cementPlantMapper.countIdentificationsByTimeRange(null, null));
+        }
+        
+        // 其他统计数据
+        statistics.put("totalPlantsCount", cementPlantMapper.countTotalPlants());
+        statistics.put("inactivePlantsCount", cementPlantMapper.countInactivePlants());
+        statistics.put("underConstructionPlantsCount", cementPlantMapper.countUnderConstructionPlants());
+        
+        return statistics;
+    }
+    
+    @Override
+    public Map<String, Object> getStatisticsByRegion() {
+        return cementPlantMapper.getStatisticsByRegion();
+    }
+    
+    @Override
+    public Map<String, Object> getStatisticsByTime(String timeUnit) {
+        return cementPlantMapper.getStatisticsByTime(timeUnit);
     }
 }
 

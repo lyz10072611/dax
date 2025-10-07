@@ -1,6 +1,5 @@
 package com.lyz.interceptors;
 
-import com.lyz.enums.ResultCode;
 import com.lyz.pojo.Result;
 import com.lyz.utils.JwtUtil;
 import com.lyz.utils.ThreadLocalUtil;
@@ -26,11 +25,25 @@ public class LoginInterceptor implements HandlerInterceptor {
     
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        String requestURI = request.getRequestURI();
+        String method = request.getMethod();
+        
+        // 对于Vue项目的静态资源，直接放行
+        if (requestURI.startsWith("/myVue/") || requestURI.startsWith("/src/") || requestURI.startsWith("/public/")) {
+            return true;
+        }
+        
+        // 对于CORS预检请求（OPTIONS），直接放行
+        if ("OPTIONS".equals(method)) {
+            return true;
+        }
+        
         // 获取请求头中的token
         String token = request.getHeader("Authorization");
         
         // 检查token是否存在
         if (token == null || token.trim().isEmpty()) {
+            // 对于页面请求，重定向到登录页；对于API请求，返回JSON错误
             handleUnauthorized(request, response, "缺少访问令牌");
             return false;
         }
@@ -88,15 +101,15 @@ public class LoginInterceptor implements HandlerInterceptor {
             response.setContentType("application/json;charset=UTF-8");
             
             // 使用Result类统一响应格式
-            Result<Void> errorResult = Result.error(ResultCode.UNAUTHORIZED, message);
+            Result<Void> errorResult = Result.unauthorized(message);
             ObjectMapper objectMapper = new ObjectMapper();
             String errorResponse = objectMapper.writeValueAsString(errorResult);
             
             response.getWriter().write(errorResponse);
             response.getWriter().flush();
         } else {
-            // 页面请求重定向到登录页
-            response.sendRedirect("/login");
+            // 页面请求重定向到Vue项目的登录页
+            response.sendRedirect("/myVue/index.html#/login");
         }
     }
 

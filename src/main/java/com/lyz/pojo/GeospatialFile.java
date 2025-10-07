@@ -52,7 +52,7 @@ public class GeospatialFile {
     
     private String dataType = "FLOAT32"; // 数据类型
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime uploadTime;
     
     private Long uploadUserId; // 上传用户ID

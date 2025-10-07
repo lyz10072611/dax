@@ -18,20 +18,13 @@ public class User {
     @JsonIgnore  // 使用 Jackson 提供的 JsonIgnore
     private String password; // 密码
 
-    private String nickname; // 昵称，可为空
     @Email
-    private String email; // 邮箱，可为空
-    private String userPic; // 头像地址
-    private Integer roleId; // 角色ID（外键）
-    private Integer sumDownload; // 总下载数量
+    private String email; // 邮箱
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime createTime; // 创建时间
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime updateTime; // 更新时间
-    
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime lastLoginTime; // 最后登录时间
     
     private Integer status; // 账户状态：0-禁用，1-启用

@@ -1,0 +1,60 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+server:
+  port: 0  # 随机端口，避免测试时端口冲突
+
+file:
+  upload-dir: /tmp/test-uploads
+
+rabbitmq:
+  exchange: test.download.exchange
+  queue: test.download.queue
+  routing-key: test.download.task
+  upload-exchange: test.upload.exchange
+  upload-queue: test.upload.queue
+  upload-routing-key: test.upload.task
+
+swagger:
+  api:
+    title: Test API
+    version: v1-test
+    description: Test API documentation
+
+logging:
+  level:
+    com.lyz: DEBUG
+    org.springframework.web: DEBUG
+    org.mybatis: DEBUG
+    org.springframework.data.redis: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 测试环境特定配置
+test:
+  database:
+    cleanup: true
+  redis:
+    flush-on-startup: true
+  mock:
+    external-services: true

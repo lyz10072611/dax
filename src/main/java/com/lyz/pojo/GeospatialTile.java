@@ -31,7 +31,7 @@ public class GeospatialTile {
     
     private String format = "PNG"; // 瓦片格式
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime createdAt;
     
     // 验证分组接口

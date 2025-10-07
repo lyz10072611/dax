@@ -42,7 +42,7 @@ public class CementPlantDataDTO {
     
     private String tifFilePath; // TIF文件路径
     
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     private LocalDateTime identificationTime; // 识别时间，默认为当前时间
     
     private String dataSource; // 数据来源，默认为GF-2

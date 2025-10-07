@@ -47,11 +47,19 @@ const selected = ref([])
 
 const load = async (p = 1) => {
   pageNum.value = p
-  const { data } = await pagePollution({ pageNum: pageNum.value, pageSize: pageSize.value, ...q.value })
-  if (data.code === 0) {
-    total.value = data.data.total
-    items.value = data.data.items
-    pages.value = Math.max(1, Math.ceil(total.value / pageSize.value))
+  try {
+    const { data } = await pagePollution({ pageNum: pageNum.value, pageSize: pageSize.value, ...q.value })
+    if (data.code === 200) {
+      total.value = data.data.total
+      items.value = data.data.items
+      pages.value = Math.max(1, Math.ceil(total.value / pageSize.value))
+    } else {
+      console.error('API Error:', data.message)
+      alert(data.message || '查询失败')
+    }
+  } catch (error) {
+    console.error('Network Error:', error)
+    alert('网络错误，请稍后重试')
   }
 }
 onMounted(() => load(1))

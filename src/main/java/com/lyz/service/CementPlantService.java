@@ -6,6 +6,7 @@ import com.lyz.pojo.CementPlantDataDTO;
 import com.lyz.pojo.PageBean;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 水泥厂业务服务接口
@@ -37,5 +38,30 @@ public interface CementPlantService {
     
     // 批量新增水泥厂数据
     void addCementPlantData(CementPlantDataDTO dataDTO);
+    
+    // ==================== 新增的高级查询方法 ====================
+    
+    // 水泥厂高级查询
+    List<CementPlant> searchPlantsByName(String plantName, Integer limit);
+    List<CementPlant> findPlantsByRegion(String province, String city, String district);
+    List<CementPlant> findPlantsByLocation(Double longitude, Double latitude, Double radiusKm);
+    List<CementPlant> findPlantsByStatus(String status);
+    
+    // 识别记录高级查询
+    List<CementPlantIdentification> findIdentificationsByPlantId(Long plantId);
+    CementPlantIdentification findLatestIdentificationByPlantId(Long plantId);
+    List<CementPlantIdentification> findIdentificationsByTimeRange(String startTime, String endTime, Long plantId);
+    List<CementPlantIdentification> findIdentificationsByNdviRange(Float minNdvi, Float maxNdvi);
+    
+    // 综合查询
+    PageBean<CementPlantIdentification> comprehensiveSearch(Integer pageNum, Integer pageSize, 
+        String plantName, String province, String city, String district, String status,
+        String startTime, String endTime, Float minNdvi, Float maxNdvi, 
+        Double longitude, Double latitude, Double radiusKm);
+    
+    // 统计查询
+    Map<String, Object> getStatisticsOverview();
+    Map<String, Object> getStatisticsByRegion();
+    Map<String, Object> getStatisticsByTime(String timeUnit);
 }
 

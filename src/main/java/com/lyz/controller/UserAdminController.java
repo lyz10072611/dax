@@ -39,14 +39,14 @@ public class UserAdminController {
     public Result<PageBean<User>> page(@RequestParam(defaultValue = "1") Integer pageNum,
                                        @RequestParam(defaultValue = "10") Integer pageSize,
                                        @RequestParam(required = false) String username) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         return Result.success(userService.pageUsers(pageNum, pageSize, username));
     }
 
     @PostMapping
     @Operation(summary = "新增用户")
     public Result add(@RequestBody @Validated User user) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         userService.adminAddUser(user);
         return Result.success();
     }
@@ -54,7 +54,7 @@ public class UserAdminController {
     @PutMapping
     @Operation(summary = "更新用户（可修改角色）")
     public Result update(@RequestBody @Validated User user) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         userService.adminUpdateUser(user);
         return Result.success();
     }
@@ -62,7 +62,7 @@ public class UserAdminController {
     @DeleteMapping("/{id}")
     @Operation(summary = "删除用户")
     public Result delete(@PathVariable Integer id) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         userService.adminDeleteUser(id);
         return Result.success();
     }
@@ -70,7 +70,7 @@ public class UserAdminController {
     @GetMapping("/{id}/quota")
     @Operation(summary = "查询用户每日下载配额与剩余TTL")
     public Result<Map<String, Object>> getQuota(@PathVariable Integer id) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         String key = "download:daily:" + id;
         String val = stringRedisTemplate.opsForValue().get(key);
         Long ttl = stringRedisTemplate.getExpire(key);
@@ -88,9 +88,9 @@ public class UserAdminController {
     @PatchMapping("/{id}/quota")
     @Operation(summary = "设置用户每日下载配额与过期时间")
     public Result setQuota(@PathVariable Integer id, @RequestBody QuotaUpdate body) {
-        if (!isAdmin()) return Result.error("无权限");
+        if (!isAdmin()) return Result.forbidden("无权限");
         if (body == null || body.value == null || body.value < 0 || body.ttlHours == null || body.ttlHours <= 0) {
-            return Result.error("参数不合法");
+            return Result.badRequest("参数不合法");
         }
         String key = "download:daily:" + id;
         stringRedisTemplate.opsForValue().set(key, String.valueOf(body.value));

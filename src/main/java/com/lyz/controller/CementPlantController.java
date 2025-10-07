@@ -23,7 +23,6 @@ import java.util.List;
 @RequestMapping("/cement-plant")
 @Validated
 @Tag(name = "水泥厂管理", description = "水泥厂基本信息和识别记录管理")
-@CrossOrigin(origins = "http://localhost:5173")
 public class CementPlantController {
     
     @Autowired
@@ -38,7 +37,7 @@ public class CementPlantController {
         if (plant != null) {
             return Result.success(plant);
         }
-        return Result.error("水泥厂不存在");
+        return Result.notFound("水泥厂不存在");
     }
     
     @GetMapping("/list")
@@ -66,9 +65,9 @@ public class CementPlantController {
     public Result addPlant(@RequestBody @Valid CementPlant cementPlant) {
         // 检查名称是否已存在
         CementPlant existingPlant = cementPlantService.findByName(cementPlant.getPlantName());
-        if (existingPlant != null) {
-            return Result.error("水泥厂名称已存在");
-        }
+            if (existingPlant != null) {
+                return Result.conflict("水泥厂名称已存在");
+            }
         
         cementPlantService.addPlant(cementPlant);
         return Result.success("水泥厂添加成功");
@@ -79,7 +78,7 @@ public class CementPlantController {
     public Result updatePlant(@RequestBody @Valid CementPlant cementPlant) {
         CementPlant existingPlant = cementPlantService.findById(cementPlant.getPlantId());
         if (existingPlant == null) {
-            return Result.error("水泥厂不存在");
+            return Result.notFound("水泥厂不存在");
         }
         
         cementPlantService.updatePlant(cementPlant);
@@ -91,7 +90,7 @@ public class CementPlantController {
     public Result deletePlant(@PathVariable @NotNull Long plantId) {
         CementPlant existingPlant = cementPlantService.findById(plantId);
         if (existingPlant == null) {
-            return Result.error("水泥厂不存在");
+            return Result.notFound("水泥厂不存在");
         }
         
         cementPlantService.deletePlant(plantId);
@@ -118,7 +117,7 @@ public class CementPlantController {
         if (identification != null) {
             return Result.success(identification);
         }
-        return Result.error("识别记录不存在");
+        return Result.notFound("识别记录不存在");
     }
     
     @GetMapping("/identification/list")
@@ -147,7 +146,7 @@ public class CementPlantController {
         // 检查关联的水泥厂是否存在
         CementPlant plant = cementPlantService.findById(identification.getPlantId());
         if (plant == null) {
-            return Result.error("关联的水泥厂不存在");
+            return Result.notFound("关联的水泥厂不存在");
         }
         
         cementPlantService.addIdentification(identification);
@@ -159,7 +158,7 @@ public class CementPlantController {
     public Result updateIdentification(@RequestBody @Valid CementPlantIdentification identification) {
         CementPlantIdentification existingIdentification = cementPlantService.findIdentificationById(identification.getIdentificationId());
         if (existingIdentification == null) {
-            return Result.error("识别记录不存在");
+            return Result.notFound("识别记录不存在");
         }
         
         cementPlantService.updateIdentification(identification);
@@ -171,7 +170,7 @@ public class CementPlantController {
     public Result deleteIdentification(@PathVariable @NotNull Long identificationId) {
         CementPlantIdentification existingIdentification = cementPlantService.findIdentificationById(identificationId);
         if (existingIdentification == null) {
-            return Result.error("识别记录不存在");
+            return Result.notFound("识别记录不存在");
         }
         
         cementPlantService.deleteIdentification(identificationId);
@@ -212,7 +211,7 @@ public class CementPlantController {
             cementPlantService.addCementPlantData(dataDTO);
             return Result.success("水泥厂数据添加成功");
         } catch (Exception e) {
-            return Result.error("数据添加失败: " + e.getMessage());
+            return Result.internalServerError("数据添加失败: " + e.getMessage());
         }
     }
 }
