@@ -1,334 +1,374 @@
-# 项目名称：Pollute-DW
+# 水泥厂管理系统 - 功能分析文档
 
-## 项目简介
-Pollute-DW 是一个基于 Spring Boot 和 Vue.js 的全栈项目，主要用于管理污染物数据。项目支持用户权限控制、文件上传与下载、异步任务处理以及性能优化等功能。
+## 项目概述
 
----
+本项目是一个基于Spring Boot 3和Vue 3的水泥厂管理系统，主要用于管理水泥厂的基本信息、识别记录、地理数据处理和文件管理。系统采用前后端分离架构，提供完整的RESTful API和现代化的Web界面。
 
-## 功能概述
+## 系统架构
 
-### 1. 用户权限控制
-- **角色划分**：
-  - 管理员（`role_code=0`）：拥有所有权限。
-  - 普通用户（`role_code=1`）：每日下载受限。
-  - 游客（`role_code=2`）：仅能查看数据。
-- **权限管理**：
-  - 数据管理（增删改查）。
-  - 用户管理（增删改查）。
-  - 下载配额设置。
-- **实现方式**：
-  - 使用 `ThreadLocal` 存储当前用户信息。
-  - 数据库中通过 `role` 和 `permission` 表定义角色和权限。
-  - 通过拦截器和注解实现权限校验。
+### 整体架构
+- **后端**: Spring Boot 3 + Java 21
+- **前端**: Vue 3 + Vite + Pinia
+- **数据库**: PostgreSQL
+- **缓存**: Redis
+- **消息队列**: RabbitMQ
+- **API文档**: Swagger/OpenAPI 3
 
-### 2. 文件管理
-- **功能**：
-  - 文件上传、下载、删除。
-  - 支持单文件和多文件打包下载。
-- **权限要求**：
-  - 文件上传和删除仅限管理员。
-  - 文件下载对普通用户有每日配额限制。
-- **实现方式**：
-  - 使用 Spring Boot 的 `MultipartFile` 处理文件上传。
-  - 文件存储路径通过 `application.yml` 配置。
-  - Redis 用于存储每日下载配额。
+### 技术栈详情
 
-### 3. 数据下载
-- **同步下载**：
-  - 支持单文件和多文件打包为 ZIP 下载。
-  - 普通用户每日下载配额为 500。
-- **异步下载**：
-  - 用户提交下载任务后，任务进入 RabbitMQ 队列。
-  - 后台处理完成后，用户可通过任务 ID 下载结果。
-- **实现方式**：
-  - 使用 Redis 脚本实现配额扣减和总下载量累加。
-  - RabbitMQ 用于异步任务队列。
-  - 下载结果以 Base64 编码存储在 Redis 中。
+#### 后端技术栈
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Spring Boot | 3.1.3 | 主框架 |
+| Java | 21 | 开发语言 |
+| MyBatis | 3.0.0 | ORM框架 |
+| PostgreSQL | - | 主数据库 |
+| Redis | - | 缓存和会话存储 |
+| RabbitMQ | - | 消息队列 |
+| JWT | 4.4.0 | 身份认证 |
+| Lombok | 1.18.30 | 代码简化 |
+| SpringDoc OpenAPI | 2.5.0 | API文档 |
+| PageHelper | 1.4.6 | 分页插件 |
 
-### 4. 污染物数据表（`pollution_data`）
-| 字段名             | 类型             | 描述                       |
-|--------------------|------------------|----------------------------|
-| id                 | BIGINT           | 主键                       |
-| pollutant_type     | ENUM('NO2','PM25','PM10','O3') | 污染物类型            |
-| data_format        | TINYINT          | 数据格式（1=原始TIF，2=日TIF，3=小时TIF，4=日PNG，5=小时PNG）|
-| produce_time       | DATETIME         | 数据生产时间               |
-| upload_time        | DATETIME         | 数据上传时间               |
-| avg_concentration  | DECIMAL(12,7)    | 平均浓度                   |
-| max_concentration  | DECIMAL(12,7)    | 最大浓度                   |
-| warning_location   | VARCHAR(100)     | 警告位置（经纬度信息，可为空）|
-| file_path          | VARCHAR(255)     | 文件路径                   |
+#### 前端技术栈
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue | 3.5.13 | 前端框架 |
+| Vite | 6.3.6 | 构建工具 |
+| Pinia | 2.2.6 | 状态管理 |
+| Vue Router | 4.5.0 | 路由管理 |
+| Axios | 1.7.7 | HTTP客户端 |
+| Playwright | 1.51.0 | E2E测试 |
 
----
+## 核心功能模块
 
-### 下载细节说明
+### 1. 用户管理模块
 
-#### 同步下载
-- **单文件下载**：
-  - 用户选择单个文件时，直接返回文件的二进制流。
-  - 响应头中包含 `Content-Disposition`，用于指定下载文件名。
-- **多文件打包下载**：
-  - 用户选择多个文件时，后端将文件打包为 ZIP 格式后返回。
-  - 使用 `ZipOutputStream` 实现文件打包。
+#### 功能描述
+提供用户注册、登录、权限管理、密码修改等基础功能，支持JWT Token认证和Redis会话管理。
 
-#### 异步下载
-- **任务提交**：
-  - 用户通过 `/pollution/async/enqueue` 接口提交下载任务。
-  - 后端将任务信息存入 Redis，并发送到 RabbitMQ 队列。
-- **任务状态查询**：
-  - 用户通过任务 ID 查询任务状态（`queued`、`processing`、`done`、`error`）。
-  - 状态存储在 Redis 中，任务完成后可下载结果。
-- **结果下载**：
-  - 任务完成后，用户通过 `/pollution/async/result/{taskId}` 接口下载结果。
-  - 结果以 Base64 编码存储在 Redis 中，下载时解码并返回。
+#### 主要接口
+- `POST /user/register` - 用户注册
+- `POST /user/login` - 用户登录
+- `GET /user/userInfo` - 获取用户信息
+- `PUT /user/update` - 更新用户信息
+- `PATCH /user/updatePwd` - 修改密码
+- `POST /user/logout` - 用户登出
+- `GET /user/permissions` - 获取用户权限
 
-#### 下载配额限制
-- **普通用户**：
-  - 每日下载配额为 500，超出配额后将返回 HTTP 429 状态码。
-  - 使用 Redis 脚本实现配额扣减和总下载量累加。
-- **管理员**：
-  - 不受下载配额限制，可无限制下载。
+#### 技术实现
+- **认证方式**: JWT Token + Redis存储
+- **密码加密**: MD5加密
+- **权限控制**: 基于角色的访问控制(RBAC)
+- **登录限制**: Redis实现登录失败次数限制
+- **会话管理**: Redis存储用户会话信息
 
-#### 错误处理
-- 文件不存在：返回 HTTP 404 状态码。
-- 配额不足：返回 HTTP 429 状态码，并在响应头中附加 `X-Reason: Daily quota exceeded`。
-- 异步任务失败：返回任务状态为 `error`，用户可重新提交任务。
+#### 用户角色
+- **管理员** (roleCode: 0): 拥有所有权限，可上传数据
+- **普通用户** (roleCode: 1): 基础权限，可查看和下载数据
 
----
+### 2. 水泥厂管理模块
 
-## 技术栈
-- **后端**：
-  - Spring Boot
-  - MyBatis
-  - Redis
-  - RabbitMQ
-- **前端**：
-  - Vue.js
-  - Pinia（状态管理）
-  - Axios（HTTP 请求）
-- **数据库**：
-  - MySQL
+#### 功能描述
+管理水泥厂的基本信息，包括地理位置、状态、识别记录等，支持CRUD操作和多种查询方式。
 
----
+#### 主要接口
+- `GET /cement-plant/{plantId}` - 根据ID查询水泥厂
+- `GET /cement-plant/list` - 查询水泥厂列表
+- `GET /cement-plant/page` - 分页查询水泥厂
+- `POST /cement-plant` - 新增水泥厂
+- `PUT /cement-plant` - 更新水泥厂
+- `DELETE /cement-plant/{plantId}` - 删除水泥厂
+- `GET /cement-plant/location-range` - 按地理位置范围查询
 
-## 项目结构
-```
-pollute-dw/
-├── src/
-│   ├── main/
-│   │   ├── java/com/lyz/
-│   │   │   ├── controller/       # 控制器层
-│   │   │   ├── service/          # 服务层
-│   │   │   ├── mapper/           # 数据库操作
-│   │   │   ├── pojo/             # 数据模型
-│   │   │   ├── config/           # 配置类
-│   │   ├── resources/
-│   │       ├── application.yml   # 配置文件
-│   ├── test/                     # 测试代码
-├── static/myVue/                 # 前端代码
-├── pom.xml                       # Maven 配置文件
+#### 数据模型
+```java
+public class CementPlant {
+    private Long plantId;           // 水泥厂ID
+    private String plantName;       // 水泥厂名称
+    private BigDecimal longitude;   // 经度
+    private BigDecimal latitude;    // 纬度
+    private String province;        // 省份
+    private String city;           // 城市
+    private String district;       // 区县
+    private String status;         // 状态(active/inactive/under_construction)
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
+}
 ```
 
----
+#### 技术实现
+- **数据验证**: Jakarta Validation注解验证
+- **分页查询**: PageHelper插件
+- **地理位置**: 支持经纬度范围查询
+- **状态管理**: 支持多种水泥厂状态
 
-## 安装与运行
+### 3. 水泥厂识别记录管理
 
-### 1. 环境要求
-- JDK 11+
-- Node.js 16+
-- MySQL 8+
-- Redis
-- RabbitMQ
+#### 功能描述
+管理水泥厂的识别记录，包括NDVI指数、数据源、识别时间等信息。
 
-### 2. 后端运行
-```bash
-# 进入项目根目录
-cd pollute-dw
+#### 主要接口
+- `GET /cement-plant/identification/{identificationId}` - 根据ID查询识别记录
+- `GET /cement-plant/identification/list` - 查询识别记录列表
+- `GET /cement-plant/identification/page` - 分页查询识别记录
+- `POST /cement-plant/identification` - 新增识别记录
+- `PUT /cement-plant/identification` - 更新识别记录
+- `DELETE /cement-plant/identification/{identificationId}` - 删除识别记录
 
-# 启动后端服务
-mvn spring-boot:run
+#### 数据模型
+```java
+public class CementPlantIdentification {
+    private Long identificationId;     // 识别记录ID
+    private Long plantId;             // 关联水泥厂ID
+    private BigDecimal longitude;     // 经度
+    private BigDecimal latitude;      // 纬度
+    private LocalDateTime identificationTime; // 识别时间
+    private String dataSource;         // 数据源
+    private String imageUuid;         // 图像UUID
+    private Float ndviIndex;         // NDVI指数
+    private String province;          // 省份
+    private String city;             // 城市
+    private String district;         // 区县
+    private LocalDateTime createdAt;  // 创建时间
+}
 ```
 
-### 3. 前端运行
-```bash
-# 进入前端目录
-cd static/myVue
+### 4. 数据查询模块
 
-# 安装依赖
-npm install
+#### 功能描述
+提供多种查询方式，支持按名称、地区、地理位置、时间范围等条件查询水泥厂和识别记录。
 
-# 启动前端服务
-npm run dev
-```
+#### 主要接口
+- `GET /data-query/cement-plants/search` - 水泥厂模糊搜索
+- `GET /data-query/cement-plants/by-region` - 按行政区划查询
+- `GET /data-query/cement-plants/by-location` - 按地理位置查询
+- `GET /data-query/cement-plants/by-status` - 按状态查询
+- `GET /data-query/identifications/by-plant` - 查询水泥厂的识别记录
+- `GET /data-query/identifications/latest` - 获取最新识别记录
+- `GET /data-query/identifications/by-time-range` - 按时间范围查询
+- `GET /data-query/identifications/by-ndvi-range` - 按NDVI范围查询
+- `GET /data-query/comprehensive-search` - 综合搜索
 
----
+#### 技术实现
+- **模糊搜索**: SQL LIKE查询
+- **地理位置**: 经纬度范围查询
+- **时间范围**: 时间区间查询
+- **NDVI范围**: 数值范围查询
+- **综合查询**: 多条件组合查询
 
-## API 文档
-项目集成了 Swagger，访问以下地址查看 API 文档：
-```
-http://localhost:8083/swagger-ui.html
-```
+### 5. 数据上传模块
 
----
+#### 功能描述
+提供水泥厂识别数据的上传功能，支持单条和批量上传，仅管理员可操作。
+
+#### 主要接口
+- `POST /data-upload/cement-plant-data` - 上传水泥厂识别数据
+- `POST /data-upload/batch-cement-plant-data` - 批量上传数据
+- `GET /data-upload/upload-status` - 获取上传状态
+
+#### 技术实现
+- **权限控制**: 仅管理员可上传
+- **数据验证**: JSON格式验证
+- **批量处理**: 支持批量上传和错误处理
+- **自动判断**: 根据水泥厂名称自动判断是否存在
+
+### 6. 文件管理模块
+
+#### 功能描述
+管理上传的文件，支持文件的上传、查询、替换、删除等操作。
+
+#### 主要接口
+- `GET /files` - 查询文件列表
+- `GET /files/{name}` - 查询单个文件信息
+- `POST /files` - 上传文件
+- `PUT /files/{name}` - 替换文件
+- `DELETE /files/{name}` - 删除文件
+
+#### 技术实现
+- **文件存储**: 本地文件系统存储
+- **权限控制**: 仅管理员可操作
+- **文件类型**: 支持多种文件格式
+- **文件信息**: 记录文件元数据
+
+### 7. 数据下载模块
+
+#### 功能描述
+提供TIF文件的下载功能，支持单文件和批量下载，包含权限控制和下载配额管理。
+
+#### 主要接口
+- `GET /data-download/tif/{fileId}` - 下载TIF文件
+- `POST /data-download/batch-download` - 批量下载
+- `GET /data-download/download-status` - 获取下载状态
+- `GET /data-download/download-history` - 获取下载历史
+- `POST /data-download/async-download` - 异步下载
+- `GET /data-download/async-download/{taskId}/status` - 查询异步任务状态
+- `GET /data-download/async-download/{taskId}/result` - 下载异步任务结果
+
+#### 技术实现
+- **权限控制**: 基于用户角色的下载权限
+- **配额管理**: 每日下载次数限制
+- **异步处理**: RabbitMQ实现异步下载
+- **批量下载**: ZIP格式打包下载
+- **下载记录**: 记录下载历史
+
+### 8. 地理数据管理模块
+
+#### 功能描述
+处理TIF格式的地理数据文件，提供瓦片服务和文件处理功能。
+
+#### 主要接口
+- `POST /geo/upload-tif` - 上传TIF文件
+- `GET /geo/tile/{fileId}/{z}/{x}/{y}` - 获取瓦片数据
+- `GET /geo/tif-info/{fileId}` - 获取TIF文件信息
+- `POST /geo/process-tif/{fileId}` - 处理TIF文件
+- `GET /geo/files` - 获取文件列表
+
+#### 技术实现
+- **TIF处理**: 专业的地理数据处理
+- **瓦片服务**: 支持地图瓦片服务
+- **文件格式**: 支持TIF格式文件
+- **异步处理**: 大文件异步处理
+- **缓存机制**: 瓦片数据缓存
+
+### 9. 前端服务管理模块
+
+#### 功能描述
+管理前端Vue项目的启动、停止和状态监控。
+
+#### 主要接口
+- `GET /frontend/status` - 获取前端服务状态
+- `POST /frontend/start` - 启动前端服务
+- `POST /frontend/stop` - 停止前端服务
+- `GET /frontend/info` - 获取前端项目信息
+
+#### 技术实现
+- **服务管理**: 自动启动前端开发服务器
+- **状态监控**: 实时监控前端服务状态
+- **进程控制**: 启动和停止前端进程
+- **配置管理**: 前端服务配置管理
 
 ## 数据库设计
-### 1. 角色表（`role`）
-| 字段名       | 类型       | 描述           |
-|--------------|------------|----------------|
-| id           | INT        | 主键           |
-| role_code    | INT        | 角色代码       |
-| role_name    | VARCHAR(20)| 角色名称       |
-| description  | VARCHAR(100)| 描述          |
 
-### 2. 用户表（`users`）
-| 字段名         | 类型         | 描述           |
-|----------------|--------------|----------------|
-| id             | INT          | 主键           |
-| username       | VARCHAR(20)  | 用户名         |
-| password       | VARCHAR(64)  | 密码（MD5 加密）|
-| role_id        | INT          | 角色 ID        |
-| daily_download | INT          | 每日下载配额   |
-| sum_download   | INT          | 总下载量       |
+### 主要数据表
 
-### 3. 权限表（`permission`）
-| 字段名       | 类型         | 描述           |
-|--------------|--------------|----------------|
-| id           | INT          | 主键           |
-| role_id      | INT          | 角色 ID        |
-| perm_code    | VARCHAR(50)  | 权限标识       |
-| perm_name    | VARCHAR(50)  | 权限名称       |
-| description  | VARCHAR(100) | 描述           |
+#### 用户表 (user)
+```sql
+CREATE TABLE user (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_time TIMESTAMP,
+    status INTEGER DEFAULT 1,
+    role_code INTEGER DEFAULT 1
+);
+```
 
----
+#### 水泥厂表 (cement_plants)
+```sql
+CREATE TABLE cement_plants (
+    plant_id SERIAL PRIMARY KEY,
+    plant_name VARCHAR(200) NOT NULL,
+    longitude DECIMAL(10, 7) NOT NULL,
+    latitude DECIMAL(10, 7) NOT NULL,
+    province VARCHAR(50),
+    city VARCHAR(50),
+    district VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'active',
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-## 常见问题
-1. **如何修改每日下载配额？**
-   - 管理员可通过 `/admin/users/{id}/quota` 接口设置用户的每日下载配额。
+#### 水泥厂识别记录表 (cement_plant_identifications)
+```sql
+CREATE TABLE cement_plant_identifications (
+    identification_id SERIAL PRIMARY KEY,
+    plant_id BIGINT REFERENCES cement_plants(plant_id),
+    longitude DECIMAL(10, 7),
+    latitude DECIMAL(10, 7),
+    identification_time TIMESTAMP,
+    data_source VARCHAR(100),
+    image_uuid VARCHAR(100),
+    ndvi_index FLOAT,
+    province VARCHAR(50),
+    city VARCHAR(50),
+    district VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-2. **异步下载任务失败怎么办？**
-   - 检查 RabbitMQ 和 Redis 服务是否正常运行。
+#### 地理数据文件表 (geospatial_files)
+```sql
+CREATE TABLE geospatial_files (
+    file_id SERIAL PRIMARY KEY,
+    file_name VARCHAR(200) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_type VARCHAR(20) NOT NULL,
+    file_size BIGINT,
+    status VARCHAR(20) DEFAULT 'processing',
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-3. **如何新增管理员？**
-   - 在数据库 `users` 表中插入一条 `role_id=0` 的记录。
+## 系统特性
 
----
+### 1. 安全性
+- **JWT认证**: 无状态的身份认证
+- **权限控制**: 基于角色的访问控制
+- **密码加密**: MD5密码加密
+- **登录限制**: 防止暴力破解
+- **输入验证**: 全面的数据验证
 
-## 贡献
-欢迎提交 Issue 或 Pull Request 来改进本项目。
+### 2. 性能优化
+- **Redis缓存**: 会话和热点数据缓存
+- **分页查询**: 大数据量分页处理
+- **异步处理**: 大文件异步处理
+- **连接池**: 数据库连接池优化
+- **瓦片缓存**: 地理数据瓦片缓存
 
----
+### 3. 可扩展性
+- **微服务架构**: 模块化设计
+- **消息队列**: RabbitMQ异步处理
+- **RESTful API**: 标准化接口设计
+- **前后端分离**: 独立部署和扩展
 
-## 许可证
-本项目采用 MIT 许可证。
+### 4. 监控和日志
+- **API文档**: Swagger自动生成文档
+- **异常处理**: 全局异常处理机制
+- **日志记录**: 详细的操作日志
+- **状态监控**: 服务状态实时监控
 
----
+## 部署架构
 
-## Redis 性能优化
+### 开发环境
+- **后端**: Spring Boot内嵌Tomcat (端口8085)
+- **前端**: Vite开发服务器 (端口5173)
+- **数据库**: PostgreSQL (端口5432)
+- **缓存**: Redis (端口6379)
+- **消息队列**: RabbitMQ (端口5672)
 
-#### 缓存雪崩
-- **问题**：大量缓存同时过期，导致请求直接打到数据库，可能引发数据库崩溃。
-- **解决方案**：
-  - 设置随机过期时间，避免大量缓存同时过期。
-  - 示例代码：
-    ```java
-    public void setDataWithRandomExpire(String key, String value) {
-        int baseExpire = 3600; // 基础过期时间，单位：秒
-        int randomExpire = new Random().nextInt(600); // 随机时间，单位：秒
-        redisTemplate.opsForValue().set(key, value, baseExpire + randomExpire, TimeUnit.SECONDS);
-    }
-    ```
+### 生产环境建议
+- **应用服务器**: Tomcat/Nginx
+- **数据库**: PostgreSQL集群
+- **缓存**: Redis集群
+- **消息队列**: RabbitMQ集群
+- **负载均衡**: Nginx
+- **监控**: Prometheus + Grafana
 
-#### 缓存击穿
-- **问题**：热点数据在缓存过期后，大量请求直接打到数据库。
-- **解决方案**：
-  - 使用分布式锁控制缓存重建。
-  - 示例代码：
-    ```java
-    public String getDataWithLock(String key) {
-        String value = redisTemplate.opsForValue().get(key);
-        if (value == null) {
-            String lockKey = "lock:" + key;
-            boolean isLock = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 10, TimeUnit.SECONDS);
-            if (isLock) {
-                try {
-                    value = loadDataFromDB(key);
-                    redisTemplate.opsForValue().set(key, value, 60, TimeUnit.SECONDS);
-                } finally {
-                    redisTemplate.delete(lockKey);
-                }
-            } else {
-                Thread.sleep(100);
-                return getDataWithLock(key);
-            }
-        }
-        return value;
-    }
-    ```
+## 总结
 
----
+本水泥厂管理系统是一个功能完整、技术先进的企业级应用系统，具有以下特点：
 
-## 数据下载性能优化
+1. **技术栈现代化**: 采用最新的Spring Boot 3和Vue 3技术栈
+2. **功能模块化**: 清晰的模块划分，便于维护和扩展
+3. **安全性高**: 完善的认证授权机制
+4. **性能优秀**: 多种性能优化手段
+5. **可扩展性强**: 支持水平扩展和功能扩展
+6. **用户体验好**: 现代化的前端界面和API设计
 
-#### 异步下载
-- **问题**：大文件下载可能导致阻塞，影响服务器性能。
-- **优化方案**：
-  - 使用 RabbitMQ 实现异步任务队列，后台处理下载任务。
-  - 下载结果以 Base64 编码存储在 Redis 中，用户通过任务 ID 获取结果。
-
-#### 多文件打包下载
-- **问题**：多文件打包可能占用大量内存。
-- **优化方案**：
-  - 使用 `ZipOutputStream` 流式处理文件，避免一次性加载所有文件。
-  - 示例代码：
-    ```java
-    try (ZipOutputStream zos = new ZipOutputStream(outputStream)) {
-        for (File file : files) {
-            zos.putNextEntry(new ZipEntry(file.getName()));
-            Files.copy(file.toPath(), zos);
-            zos.closeEntry();
-        }
-    }
-    ```
-
-#### 缓存下载结果
-- **问题**：重复下载相同数据会增加服务器负担。
-- **优化方案**：
-  - 使用 Redis 缓存下载结果，设置合理的过期时间。
-
----
-
-## 数据上传性能优化
-
-#### 异步上传
-- **问题**：大文件上传可能阻塞主线程，影响并发性能。
-- **优化方案**：
-  - 使用 `@Async` 注解实现异步上传。
-  - 示例代码：
-    ```java
-    @Async
-    public CompletableFuture<Void> asyncUploadData(PollutionData data) {
-        return CompletableFuture.runAsync(() -> {
-            mapper.add(data);
-        });
-    }
-    ```
-
-#### 分批写入
-- **问题**：一次性写入大量数据可能导致数据库压力过大。
-- **优化方案**：
-  - 将数据分批写入数据库，每批次控制在 1000 条以内。
-  - 示例代码：
-    ```java
-    public void batchInsert(List<PollutionData> dataList) {
-        int batchSize = 1000;
-        for (int i = 0; i < dataList.size(); i += batchSize) {
-            List<PollutionData> batch = dataList.subList(i, Math.min(i + batchSize, dataList.size()));
-            mapper.batchInsert(batch);
-        }
-    }
-    ```
-
-#### 数据校验
-- **问题**：上传数据格式错误可能导致数据库异常。
-- **优化方案**：
-  - 在上传前进行数据校验，确保数据格式和约束条件正确。
-  - 使用 `@Validated` 注解和自定义校验器。
+系统适用于水泥厂数据管理、地理信息处理、文件管理等场景，是一个典型的企业级Web应用系统。
